@@ -1,0 +1,179 @@
+First I downloaded the tar file using curl,
+curl http://cs.ucla.edu/classes/spring15/cs33/lab/sthttpd-2.27.0.tar.gz > sthttpd-2.27.0.tar.gz
+
+I untared the file using,
+tar -xvf sthttpd-2.27.0.tar.gz
+
+Then I applied the patch using patch src/sthttpd.c and pasting the patch
+into the standard input, then ending the file with CTRL-D.
+
+1.
+
+I did which gcc and got /usr/local/cs/bin/gcc, so I was ready to go.
+
+2. 
+
+I built each file with make clean then make CFLAGS='options...' for each.
+
+3.
+
+I used Eric Kim's suggestions to test the thttpd server, the issue I was
+having was I was on the wrong lnxsrv, I needed to log into the right number
+when running it with the -D option.
+
+5.
+
+I ran: src/thttpd-sp -p 12948 -D -C config.f with config.f containing:
+charset=AAAAAAAAAAAABBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDEEEEEEEEEEEEEEEEFFFFFFFFFFFFFFFF
+FFGGGGGGGGGGGGGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHIIIIIIIIIIIJJJJJJJJKKKKKKKKKKKLLLLLLLLLMMMMMMMMMNNNNNNNOOOOOOOOOOOPPPPPPPPPPPPQQQQQQQRRRRRRSSSSSS
+Ignore the newline.
+
+I got the port numbers from the document given to us on CCLE.
+
+Using gdb, I found when exiting from read_config, line 1190, I got this:
+
+*** stack smashing detected ***: /w/home.03/cs/ugrad/konrad/Documents/CS33/smashinglab/sthttpd-2.27.0/src/thttpd-sp terminated
+Program received signal SIGSEGV, Segmentation fault.
+uw_frame_state_for (context=context@entry=0xffffb978, fs=fs@entry=0xffffb9f8) at ../../../../gcc-4.9.2/libgcc/unwind-dw2.c:1253
+
+The machine instruction is:
+0x157cae <uw_frame_state_for+446>       cmpw   $0xb858,(%eax)
+
+When I backtrace I get:
+#0  uw_frame_state_for (context=context@entry=0xffffb978, fs=fs@entry=0xffffb9f8) at ../../../../gcc-4.9.2/libgcc/unwind-dw2.c:1253
+#1  0x00158b20 in _Unwind_Backtrace (trace=0xa77670 <backtrace_helper>, trace_argument=0xffffbad4) at ../../../../gcc-4.9.2/libgcc/unwind.inc:290
+#2  0x00a77865 in backtrace () from /lib/libc.so.6
+#3  0x009e874b in __libc_message () from /lib/libc.so.6
+#4  0x00a7adad in __fortify_fail () from /lib/libc.so.6
+#5  0x00a7ad5a in __stack_chk_fail () from /lib/libc.so.6
+#6  0x0804b69f in read_config (filename=<optimized out>) at thttpd.c:1190
+
+6.
+
+I then ran the second one: src/thttpd-as -p 12949 -D -C config.f
+With the same config file.
+
+Using gdb, I got this error after stepping through a ton of asan code after line 1018 of thttpd.c:
+==22631==ERROR: AddressSanitizer: stack-buffer-overflow on address 0xffffc024 at pc 0x13ded1 bp 0xffffbf78 sp 0xffffbf5c
+READ of size 246 at 0xffffc024 thread T0
+
+Program received signal SIGSEGV, Segmentation fault.
+
+The machine instruction is:
+0x110425 <__kernel_vsyscall+5>  sysenter
+
+The backtrace:
+#0  uw_frame_state_for (context=context@entry=0xffffb890, fs=fs@entry=0xffffb910) at ../../../../gcc-4.9.2/libgcc/unwind-dw2.c:1253
+#1  0x00777b20 in _Unwind_Backtrace (trace=0x16e5e0 <__sanitizer::Unwind_Trace(_Unwind_Context*, void*)>, trace_argument=0xffffb9f8) at ../../../../gcc-4.9.2/libgcc/unwind.inc:290
+#2  0x0016ebaf in __sanitizer::StackTrace::SlowUnwindStack (this=0xffffbaf8, pc=1302225, max_depth=1296911693) at ../../../../../gcc-4.9.2/libsanitizer/sanitizer_common/sanitizer_linux_libcdep.cc:168
+#3  0x00171a60 in __sanitizer::StackTrace::Unwind (this=0xffffbaf8, max_depth=256, pc=1302225, bp=4294950776, stack_top=4294959104, stack_bottom=4284473344, request_fast_unwind=false)
+    at ../../../../../gcc-4.9.2/libsanitizer/sanitizer_common/sanitizer_stacktrace_libcdep.cc:19
+    #4  0x00165635 in __asan_report_error (pc=1302225, bp=4294950776, sp=4294950748, addr=4294950948, is_write=false, access_size=246) at ../../../../../gcc-4.9.2/libsanitizer/asan/asan_report.cc:776
+    #5  0x0013dee6 in __interceptor_strchr (
+        str=0xffffbfc0 "charset=", 'A' <repeats 12 times>, 'B' <repeats 16 times>, 'C' <repeats 17 times>, 'D' <repeats 15 times>, 'E' <repeats 16 times>, 'F' <repeats 18 times>,
+	'G' <repeats 14 times>, 'H' <repeats 30 times>, 'I' <repeats 11 times>, "JJJJJJJJ", 'K
+	' <repeats 11 times>, "LLLLLLLLLMMMMMMMMMNNNNNN"..., c=35) at ../../../../../gcc-4.9.2/libsanitizer/asan/asan_interceptors.cc:417
+	#6  0x0804da70 in read_config (filename=<optimized out>) at thttpd.c:1018
+
+7.
+
+Finally, I ran the third one: src/thttpd-no -p 12950 -D -C config.f
+With again the same config file.
+
+In a similar manner to the sp executable, it crashed at 1190, with the message:
+Program received signal SIGSEGV, Segmentation fault.
+Cannot access memory at address 0x48484848
+
+The machine instruction:
+0x804b4ba <read_config+1274>    ret
+
+The backtrace:
+#0  0x48484848 in ?? ()
+#1  0x48484848 in ?? ()
+#2  0x48484848 in ?? ()
+#3  0x48484848 in ?? ()
+#4  0x49494848 in ?? ()
+#5  0x49494949 in ?? ()
+#6  0x49494949 in ?? ()
+#7  0x4a4a4a49 in ?? ()
+#8  0x4a4a4a4a in ?? ()
+#9  0x4b4b4b4a in ?? ()
+#10 0x4b4b4b4b in ?? ()
+#11 0x4b4b4b4b in ?? ()
+#12 0x4c4c4c4c in ?? ()
+#13 0x4c4c4c4c in ?? ()
+#14 0x4d4d4d4c in ?? ()
+#15 0x4d4d4d4d in ?? ()
+#16 0x4e4e4d4d in ?? ()
+#17 0x4e4e4e4e in ?? ()
+#18 0x4f4f4f4e in ?? ()
+#19 0x4f4f4f4f in ?? ()
+#20 0x4f4f4f4f in ?? ()
+#21 0x50505050 in ?? ()
+#22 0x50505050 in ?? ()
+#23 0x50505050 in ?? ()
+#24 0x51515151 in ?? ()
+#25 0x52515151 in ?? ()
+#26 0x52525252 in ?? ()
+#27 0x53535352 in ?? ()
+#28 0x00535353 in ?? ()
+#29 0x00000000 in ?? ()
+
+Which is awesome, seeing as though these are simply the characters I put in the buffer, which
+overflowed as return addresses.
+
+8.
+
+For #8, I used an instruction suggested by a TA for each of the three files them renamed them from thttpd.s
+gcc -I .. -I . -S -m32 -O2 -fno-inline -fstack-protector-strong -fno-asynchronous-unwind-tables thttpd.c
+gcc -I .. -I . -S -m32 -O2 -fno-inline -fsanitize=address -fno-asynchronous-unwind-tables thttpd.c
+gcc -I .. -I . -S -m32 -O2 -fno-inline -fno-asynchronous-unwind-tables thttpd.c
+
+There was no visible difference for the stack-protector in handle_read.
+The sanitize address however has a ton of more jumps and checks to the stack,
+and uses the asan package, and a variety of other calls in order to methods to
+actually sanitize the addresses passed onto the stack.
+
+9.
+
+When it comes to #9, I was able to achieve manipulating the return address correctly.
+When writing the address in the correct spot after the edge of the buffer, you can launch
+the function called unlink() in the libc library, and with some parameter to pass in target.txt
+to delete it.
+
+In order to find the address and locations for arguments into unlink(), I created a sample program
+which I attached, and then compiled it using the -m32 argument, and ran it using gdb. I set a breakpoint
+at unlink, and then copied the address of the first instruction. This will be different on different seasnet
+servers, so mine only works on lnxsrv01. Each machine has this library statically linked at a different location,
+this my exploit would only work on that server.
+
+If I echo -e the byte address (in opposite order) of the unlink function into the configuration file,
+I can actually transfer control to unlink, which I managed to do with some experimentation of which bytes
+would overwrite the return address.
+
+Next I needed to find how to pass the parameter, and I did this by passing an arbitrary value in my sample
+program, and looking for it in the stack. I found that at %esp+4, the pointer to a char array resides, so
+in my exploit, the next 8 bytes (because of a 4 byte padding) were two sets of some address pointing to
+target.txt. Now the question was how to do that.
+
+Now this is the part of the exploit that has huge assumptions. The only way for the config file to transfer
+the filename into the program is if we give a pointer to some point in the overrun buffer. The only way to
+do that is if we know the location of the stack. For the purpose of the exercise I used gdb so that the stack
+was not randomized and was instead fixed at a certain value as we entered unlink: 0xffffc1c0. For this to work as a real
+exploit, the program would have had to be compiled without ASLR, which can be turned off using:
+"echo 0 | sudo tee /proc/sys/kernel/randomize_va_space" or modifying the file:" /etc/sysctl.d/01-disable-aslr.conf"
+Getting that to be run would be a whole different ballgame, so I just used the pointer to the next set of bytes, so
+$esp+8, so no padding would be needed and I could put the text for "target.txt" followed by a null byte, right
+after the argument. Therefore, when "src/thttpd-no -p 12950 -D -C config.f" is run, "target.txt" is deleted in
+the working directory. Again this will not work on any other machine, as the stack address is unique to my
+iteration of the program, and the address to unlink was unique to lnxsrv01.
+
+In order to make the process more general and beating stack randomization, we can fill the rest of the 1000 line buffer
+with a no-op sled, "./././././" and so on, ending with a "target.txt\0". This no-op slide has a 50 percent change of hitting
+the correct value of a '.', and if the stack value was close to what we have guessed, we will hit this no-op slide and delete
+the file correctly. A good way to do this is to run the file many times and see the range of the stack pointer, and then to
+make the char pointer point to the average value + 439, (900-22)/4, where the 12 bytes are the return address, 4 byte padding,
+and 4 byte char pointer, and ten bytes of which are "target.txt". This makes you most likely to jump right into the middle of
+our no-op sled, and sliding right into the file to delete. 
+
+I am attaching my exploit as 'config.f' and my sample program 'sample.c'

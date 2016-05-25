@@ -1,0 +1,15 @@
+First, I had no idea what to do, so I was looking up Lisp instructions and
+trying to figure out what in the world Ftimes was. Finally, after some help
+from Piazza, I got a bit of a hint and used the correct gdb start code:
+gdb --args ~eggert/bin32/bin/emacs-24.5 -batch -eval '(print (* 37 -26))'
+after navigating to the proper source code.
+I then used layout split to see both the source, set one breakpoint at
+Ftimes with 'b Ftimes' then ran the code, with 'r'. To step through each
+machine instruction I used 'si' or 'stepi' and to examine registers I used
+'p/x $eax' and for memory, 'x/x $esp' to see the data at the location pointed
+to by esp. I used these to write all my traces, with a lot of copy pasting
+and plenty of coffee. If I was better at python scripting I would write a
+script to do this for me, and examine the registers and note the differences,
+but alas, maybe for some other day. Note: some of the mov instructions did
+not actually change the registers, they had the values in there before the
+instruction was executed, therefore I left the third column blank for those.

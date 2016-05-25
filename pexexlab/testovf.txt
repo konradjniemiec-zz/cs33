@@ -1,0 +1,45 @@
+I have the three files, I will post the diff outputs here:
+
+-O2 vs -O2 -fwrapv
+12c12,16
+<	xorl	%eax, %eax
+---
+>	movl	big, %eax
+> 	leal	1(%eax), %edx
+> 	cmpl	%edx, %eax
+> 	setg	%al
+> 	movzbl	%al, %eax
+
+
+-O2 vs. -O2 -ftrapv
+1a2
+>	.globl	__addvsi3
+12c13,25
+<	xorl	%eax, %eax
+---
+>	movl	big, %eax
+> 	subl	$8, %esp
+> 	.cfi_def_cfa_offset 12
+> 	pushl		    $1
+> 	.cfi_def_cfa_offset 16
+> 	leal		    1(%eax), %edx
+> 	pushl		    %eax
+> 	.cfi_def_cfa_offset 20
+> 	addl		    $16, %esp
+> 	.cfi_def_cfa_offset 4
+> 	cmpl		    %edx, %eax
+> 	setg		    %al
+> 	movzbl		    %al, %eax
+
+The optimized version simply returns zero, there is no normal way to have x+1 > x
+without any boundary conditions.
+
+The wrapped version normally adds one and compares the value, zero extends the
+boolean into the return value, because if big = INT_MAX, you get INT_MIN which
+is less then big.
+
+The trap does a similar computation to the wrap program, but pushes the values
+onto the stack as well. After a quick look, there doesn't seem to be any trapping
+at all, which is because of the -O2 flag. After looking at an unoptimized version,
+there is a jump to a SIGBART based on those values on the stack, but it is
+optimzed away. Therefore the trap DOES NOT TRAP.

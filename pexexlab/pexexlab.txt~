@@ -1,0 +1,5 @@
+First, I had no idea what to do, so I was looking up Lisp instructions and
+trying to figure out what in the world Ftimes was. Finally, after some help
+from Piazza, I got a bit of a hint and used the correct gdb start code:
+gdb --args ~eggert/bin32/bin/emacs-24.5 -batch -eval '(print (* 37 -26))'
+I then used layout asm to see the assembly code, 

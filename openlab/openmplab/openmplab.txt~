@@ -1,0 +1,48 @@
+The first thing I did with this project is read a couple presentations on
+OpenMP and then figured out exactly what optimizations will help this project.
+
+Then I ran the gprof commands and figured out that the only function worth
+optimizing was func1, the others did not even have a noticable processor share.
+
+I first tried obvious optimizations, such as hoisting memory accesses outside of
+the for loop, then I turned to OpenMP.
+
+First I spent four hours getting very angry because nothing worked. I wrote an
+angry post on Piazza then I realized I was spelling parallel wrong. With two r's.
+What a dummy right?
+
+I started by paralelling all the for loops, and then taking some of them away.
+I found that it was better to only fork/join the outer for loop, since if I
+did the inner one the grain size was too small. I also tried a reduction but
+since I paralleled the outer loop it didn't work well I got a nice error:
+"Reduction Value is private in outer context"
+
+I also noticed that two of the for loops were redundant, and could be reduced
+to a single for loop. The first i for loop and second j for loop could be included
+at the start and end of their respective for loops respectively. This got my speedup
+from around 4.3x to 4.5x.
+
+So anyways I wasn't seeing much speedup at first but a nice gentleman/woman on piazza
+suggested I use linuxsrv06 which was actually amazing.
+
+My best speedup was as follows:
+
+./omp
+FUNC TIME : 0.134736
+^[[ATOTAL TIME : 2.921443
+
+and my make check output the correct value:
+
+gcc -o omp  -O3 -fopenmp filter.c main.c func.c util.c -lm
+cp omp filter
+./filter
+FUNC TIME : 0.134772
+TOTAL TIME : 2.313802
+diff --brief correct.txt output.txt
+
+Again the server latency is a huge deal I get a lot of 0.6... values when
+trying it even on srv06, but every third or so is 0.13... or 0.14... which
+is the speedup I am looking for.
+
+Overall interesting assignment, I think the server latency was an issue but
+with some patience, cooled nerves and correct spelling anything is possible.
